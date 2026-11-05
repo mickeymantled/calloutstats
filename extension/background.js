@@ -14,7 +14,7 @@
 const DEFAULT_BASE = "http://127.0.0.1:47831";
 const VERSION = chrome.runtime.getManifest().version;
 const POLL_ALARM = "cc-poll";
-const PROFILE_TIMEOUT_MS = 4 * 60_000;
+const PROFILE_TIMEOUT_MS = 27 * 60_000; // pump.fun rate-limits the list (~5 pages, then a pause of minutes); content-profile.js stops itself after 25
 const LEADERBOARD_TIMEOUT_MS = 5 * 60_000;
 const NAV_TIMEOUT_MS = 60_000;
 
@@ -271,7 +271,8 @@ async function doProfile(run, handle) {
     last = resp;
     if (resp.status === "retry" && attempt < max) {
       await log("warn", `${handle}: attempt ${attempt} -> retry (${resp.reason})`, run.runId);
-      await sleep(rand([1500, 3500]));
+      // a retry is usually pump.fun refusing the callouts request (rate limit): back off
+      await sleep(rand([30_000, 60_000]) * attempt);
       continue;
     }
     break;

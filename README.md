@@ -39,10 +39,22 @@ What the first real runs (2026-11-04) showed, and what the code now does about i
   Unicode minus sign. `src/parser.ts` (`normalizeLines`) folds that back into the
   single-line layout the console script expected; `src/parser.realrows.test.ts` pins the
   real text.
-- The list loads 40 rows per scroll and **stops at 220 rows** even when the header counts
-  more (473 for mickeymantled's 1M). Newest first, so a daily run keeps up with anyone
-  doing fewer than ~220 callouts a day; older history is whatever earlier runs captured.
-  The collector logs "the list showed N of M callouts" when this happens.
+- **pump.fun rate-limits the callout list.** The modal fetches
+  `frontend-api-v3.pump.fun/callout/list/<wallet>?limit=20&sortBy=TIMESTAMP&sortOrder=DESC&pageToken=…&window=monthly`
+  (recorded in `data/discovered_endpoints.json` by the extension), and after about five
+  pages in a row it answers HTTP 429 for a few minutes; the modal then shows "Could not
+  load callout history right now", and every further scroll is another refused request
+  that keeps the limit alive. So the extension scrolls briskly while rows arrive, leaves
+  the page alone for 150 s once the loader stalls, gives up after 8 minutes without a new
+  row, and allows 25 minutes per profile; the collector spaces retries 30-60 s × attempt
+  apart and profiles 15-30 s apart (`delayBetweenProfilesMs`). A run over 15 busy
+  profiles takes a few hours, which is fine for the 06:00 job. The spec's second data
+  path (calling that JSON endpoint from the logged-in browser instead of scrolling,
+  which would cut the requests five-fold) is not built yet: it was blocked by the
+  assistant's auto-mode policy during this session and needs a session run without it.
+- Callouts from before pump.fun began tracking tailers (mid-October 2026) show no tailer
+  line at all: for mickeymantled the 1M header counted 473 callouts, 331 of which carry
+  tailer stats. Only those are stored; the collector logs the two counts.
 - **`/leaderboard` is behind a Cloudflare interstitial** even for a browser session that
   loads profiles without one. The extension waits up to 45 s for it to clear by itself and
   never interacts with it; until it clears, runs use the handles from `config.json` and
@@ -319,7 +331,8 @@ npm run typecheck   # tsc --noEmit
   rewards-to-peak ratio is only meaningful when the peak sum is positive. As of 2026-11-04
   the leaderboard page is behind a Cloudflare interstitial, so rewards are empty until
   that changes.
-- pump.fun's callout list shows at most ~220 callouts per range (newest first) while the
-  header counts them all. Header totals (`callouts`, `tailers`, `tail volume`) therefore
-  can exceed the sums of the rows we store; the header `tailers` figure also counts unique
-  tailers, not the per-row sum. Totals on the site are sums over stored rows.
+- Callouts made before pump.fun tracked tailers (mid-October 2026) have no tailer line and
+  are not stored, so pump.fun's header `callouts` count can exceed ours; the header
+  `tailers` figure counts unique tailers, not the per-row sum. Totals on the site are sums
+  over stored rows, and each row is as rounded as pump.fun shows it (`+$2K`), so a sum over
+  hundreds of rows carries rounding noise of up to a few hundred dollars per row.

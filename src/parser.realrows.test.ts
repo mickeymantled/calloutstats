@@ -108,3 +108,40 @@ describe("real pump.fun modal text (2026-11-04)", () => {
     expect(toNum("–")).toBeNull();
   });
 });
+
+/** Odd rows from the same profile's 1M range (472 rows on the page, 331 with stats). */
+const ODD_ROWS = [
+  "HYPEHOUSE", "·", "6d ago", "1.7x", "$90.6K", "$160K MC", "114 tailers · 1h", `${MINUS}$2K`, "· 1d", `${MINUS}$2K`, "· reached", "+$7K",
+  "BS", "·", "7d ago", "—", "$158K", "— MC", "31 tailers · 1h", `${MINUS}$551`, "· 1d", `${MINUS}$573`, "· reached", "+$490",
+  "CI", "·", "13d ago", "1.5x", "$161K", "$257K MC", "65 tailers · 1h", `${MINUS}$2K`, "· 1d", `${MINUS}$2K`, "· reached", "$0",
+  "LOAD", "·", "23d ago", "4x", "$3.57M", "$15M MC", "9 tailers · 1h", "—", "· 1d", "—", "· reached", "—",
+  "HIRE", "·", "23d ago", "51x", "$39.3K", "$2.01M MC", "270 tailers · 1h", "+$2K", "· 1d", "+$9K", "· reached", "—",
+  "BTCKNIGHT", "·", "23d ago", "1.6x", "$7.41K", "$12.4K MC",
+  "Solami", "·", "23d ago", "1.2x", "$26.6K", "$33.5K MC",
+  "Performance", "Reached 2x+", "58.1%", "473 calls",
+].join("\n");
+
+describe("odd real rows: dashes for multiplier / peak MC / every figure, $0 peaks, callouts without stats", () => {
+  const { rows } = parseModalText(ODD_ROWS, NOW);
+  const by = Object.fromEntries(rows.map((r) => [r.name, r]));
+
+  it("stores only the callouts that have a stats line", () => {
+    expect(rows.map((r) => r.name)).toEqual(["HYPEHOUSE", "BS", "CI", "LOAD", "HIRE"]);
+  });
+
+  it("a dash multiplier and a dash peak MC parse as nulls, the entry MC survives", () => {
+    expect(by.BS).toMatchObject({ mult: null, entryMc: 158000, peakMc: null, mc: "$158K → — MC", peak: 490, pnl1h: -551, pnl1d: -573 });
+  });
+
+  it("reached $0 is a zero, not a missing value", () => {
+    expect(by.CI.peak).toBe(0);
+  });
+
+  it("a row with every figure dashed keeps its multiplier and MCs", () => {
+    expect(by.LOAD).toMatchObject({ tailers: 9, pnl1h: null, pnl1d: null, peak: null, mult: 4, entryMc: 3570000, peakMc: 15000000 });
+  });
+
+  it("the last stats row does not borrow the multiplier of the stat-less row below it", () => {
+    expect(by.HIRE).toMatchObject({ tailers: 270, pnl1h: 2000, pnl1d: 9000, peak: null, mult: 51, entryMc: 39300, peakMc: 2010000 });
+  });
+});

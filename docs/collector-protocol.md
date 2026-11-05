@@ -98,7 +98,7 @@ Body:
   "dialogText": "innerText of the whole stats dialog (header totals live here)",
   "state": "rows" | "empty" | "unknown",
   "range": "1M" | "All" | null,
-  "rowsSeen": 220,
+  "rowsSeen": 472, "statsRows": 331,
   "iterations": 37, "durationMs": 14000,
   "endpoints": ["https://frontend-api-v3.pump.fun/...?x=1", ...],
   "screenshotDataUrl": null }
@@ -147,13 +147,18 @@ Port of `pumpfun_callout_check.js` and `src/scraper/profile.ts`, in plain JS:
    children also does. `dialog` = its closest `[role=dialog]` or itself. `scroller` = the
    descendant of `dialog` with overflow-y auto|scroll and the largest scrollHeight
    (> clientHeight + 10), else the list element.
-7. Loop (max 400, stop after 6 consecutive iterations with no new rows): take
-   `list.innerText`, split lines, for every line matching the row-start regex
-   `^\d[\d,]*\s*tailers?\b` (case-insensitive) add the block
-   `lines[i-7 .. i+8].join("\n")` to a Set; then
-   `scroller.scrollTop = scroller.scrollHeight`; click any visible button with text
-   /load more|show more/i; wait 600 ms. The list loads 40 more rows per scroll and, on
-   2026-11-04, stopped at 220 rows although the header counted 473 (see "Real layout").
+7. Loop (max 800 passes, at most 25 minutes): take `list.innerText`, split lines, for
+   every line matching the row-start regex `^\d[\d,]*\s*tailers?\b` (case-insensitive)
+   add the block `lines[i-7 .. i+8].join("\n")` to a Set; count the rows on the page as
+   the number of "N<unit> ago" lines; scroll to the bottom (every other pass: 1500 px
+   above the bottom, so the loader sees a fresh scroll); click any visible button with
+   text /load more|show more/i. While the count grew in the last 5 s wait 600 / 300 ms;
+   once it stalls wait 150 s before the next nudge (each scroll during a stall is another
+   request pump.fun refuses with 429, which keeps the limit alive). Stop once the count
+   has not grown for 20 s and is at least the header's callout count, or has not grown
+   for 8 minutes. If no row ever appeared and the list shows "Could not load callout
+   history right now", report `failed` with that reason after 45 s so the collector
+   retries later (background.js backs off 30-60 s × attempt).
 8. Report `modalText` (final `list.innerText`), `blocks` (the Set), `dialogText`
    (`dialog.innerText`), `range`, `rowsSeen` (row-start lines in modalText), `endpoints`
    (URLs from `performance.getEntriesByType("resource")` with initiatorType
@@ -175,11 +180,21 @@ Performance / Reached 2x+ / 69.2% / 13 calls / ... / Outcome spread / 1.0x / ...
 ```
 
 Negative values use U+2212 MINUS SIGN; "—" means no value (also for 1d on callouts younger
-than a day); the multiplier and "entry → peak MC" sit above the stats line. Header
-tailers (1,899) is not the sum of the rows' tailers (2,367): pump.fun counts unique
-tailers there. `/leaderboard` answered with a Cloudflare interstitial ("Just a moment...",
+than a day, for the multiplier and the peak MC of a callout with no peak yet, and for all
+three figures on some old rows); "reached $0" is a zero, not a dash. The multiplier and
+"entry → peak MC" sit above the stats line. Callouts from before pump.fun tracked tailers
+(older than ~23 days on 2026-11-04) have only name / · / age / multiplier / entry MC /
+peak MC and no stats line; the parser skips them. Header tailers (1,899) is not the sum
+of the rows' tailers (2,367): pump.fun counts unique tailers there. `/leaderboard` answered with a Cloudflare interstitial ("Just a moment...",
 HTTP 403) even in a browser that loads profiles without one; background.js waits up to
 45 s for it to clear on its own and otherwise reports the page as failed.
+
+The list behind the modal is `GET https://frontend-api-v3.pump.fun/callout/list/<wallet>`
+with `limit=20&sortBy=TIMESTAMP&sortOrder=DESC&window=monthly` and a `pageToken` for the
+next page (the wallet is the one in `frontend-api-v3.pump.fun/users/<wallet>` on the
+profile page). It is rate-limited: after about five pages it answers 429 for a few
+minutes. Calling it from the logged-in browser with a larger `limit` would be the spec's
+second data path; it is not implemented yet (see README).
 
 Leaderboard page: click "Top rewards"; for each view click the control whose text
 matches all-time (/all[\s-]?time|^all$/i), monthly (/month/i), weekly (/week/i),

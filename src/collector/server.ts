@@ -19,7 +19,7 @@ import { exportBundle } from "../export";
  */
 
 export const MAX_BODY_BYTES = 4 * 1024 * 1024;
-const STALE_RUN_MS = 3 * 3600e3;
+const STALE_RUN_MS = 8 * 3600e3; // a run over many profiles can take hours under pump.fun's rate limit
 
 export type Logger = Pick<typeof defaultLog, "info" | "warn" | "error" | "debug">;
 
@@ -517,7 +517,8 @@ export function createCollector(opts: CollectorOptions = {}): Collector {
       run.ok++;
       const range = str(body.range);
       logger.info(`${tag}: ok, ${rows.length} callouts${range ? ` in range ${range}` : ""} (header: ${header.callouts ?? "?"} callouts, ${header.tailers ?? "?"} tailers, tail volume ${header.tailVolume ?? "?"}; ${num(body.iterations) ?? "?"} scroll steps, ${num(body.durationMs) ?? "?"} ms)`);
-      if (header.callouts !== null && rows.length < header.callouts) logger.warn(`${tag}: the list showed ${rows.length} of ${header.callouts} callouts the header counts; pump.fun caps the list, older callouts come from earlier runs`);
+      const seen = num(body.rowsSeen);
+      if (header.callouts !== null && rows.length < header.callouts) logger.warn(`${tag}: ${rows.length} of the ${header.callouts} callouts the header counts have tailer stats${seen !== null ? ` (${seen} rows were on the page)` : ""}; callouts from before pump.fun tracked tailers have none and are not stored`);
       return ok({ status: "ok", rows: rows.length, header: headerOut(header), zeroCallouts });
     }
     return retryOrFail(`no rows parsed (state=${pageState}, header callouts=${header.callouts ?? "?"})`);

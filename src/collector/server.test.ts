@@ -399,8 +399,8 @@ describe("collector over HTTP", () => {
     expect(db.prepare(`SELECT notes FROM runs WHERE id = ?`).get(start.json.runId)).toEqual({ notes: "aborted" });
   });
 
-  it("a stale running run (> 3 h) is marked failed/abandoned by the next run/start; a fresh one blocks it", async () => {
-    const stale = db.prepare(`INSERT INTO runs (started_at, status) VALUES (?, 'running')`).run(new Date(Date.now() - 4 * 3600e3).toISOString());
+  it("a stale running run (> 8 h) is marked failed/abandoned by the next run/start; a fresh one blocks it", async () => {
+    const stale = db.prepare(`INSERT INTO runs (started_at, status) VALUES (?, 'running')`).run(new Date(Date.now() - 9 * 3600e3).toISOString());
     const staleId = Number(stale.lastInsertRowid);
     expect((await api("GET", "/status")).json.running).toBeNull(); // not adopted until something refers to it
     const start = await api("POST", "/run/start", { source: "t", extensionVersion: "0", request: null });

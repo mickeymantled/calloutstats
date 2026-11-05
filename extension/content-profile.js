@@ -22,7 +22,9 @@
   const args = window.__ccArgs || {};
   const token = args.token;
   const t0 = Date.now();
-  const HARD_LIMIT_MS = 3.5 * 60_000;
+  const HARD_LIMIT_MS = 25 * 60_000; // background.js gives the profile script 27 minutes
+  const STALL_REST_MS = 150_000; // after the loader stalls, wait this long before nudging again
+  const STALL_GIVE_UP_MS = 8 * 60_000; // two rests without a new row: take what is there
 
   const send = (result) => { try { chrome.runtime.sendMessage({ type: "result", token, result }); } catch (e) { console.error("[cc] sendMessage failed", e); } };
   const progress = (msg) => { try { chrome.runtime.sendMessage({ type: "progress", token, msg }); } catch { /* ignore */ } };
@@ -44,6 +46,11 @@
   // layout) or on the next lines (current layout); the collector's parser folds both.
   const rowStartRe = /^\d[\d,]*\s*tailers?\b/i;
   const countRows = (s) => (s.match(/(^|\n)\s*\d[\d,]*\s*tailers?\b/gi) || []).length;
+  // Every callout has an age line; only callouts since pump.fun began tracking
+  // tailers (mid-October 2026) also have a "N tailers" stats line.
+  const countAges = (s) => (s.match(/\d+\s*(?:min|mo|[smhdwy])\s*ago\b/gi) || []).length;
+  // pump.fun's error state when the callouts request is refused (seen after a burst of page loads)
+  const UNAVAILABLE_RE = /could not load callout history/i;
 
   const clickables = (root) => [...root.querySelectorAll("button, [role='tab'], [role='button'], a, [role='menuitem'], [role='option']")];
   const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
@@ -179,19 +186,42 @@
       const scroller = [...dialog.querySelectorAll("*")]
         .filter((el) => { const cs = getComputedStyle(el); return /(auto|scroll)/.test(cs.overflowY) && el.scrollHeight > el.clientHeight + 10; })
         .sort((a, b) => b.scrollHeight - a.scrollHeight)[0] || list;
-      // 7. scroll until no new rows appear (the list loads more rows on scroll)
-      let stable = 0, last = -1;
-      for (let k = 0; k < 400 && stable < 6; k++) {
+      // 7. scroll until no new rows appear. The list loads 40 rows per scroll, about
+      // six loads a minute before pump.fun pauses the loader for a minute or more, so
+      // be patient: stop after 20 s without growth once every callout the header
+      // counts is on the page, or after 150 s without growth otherwise. Every other
+      // pass steps back a little so the loader sees a fresh scroll.
+      const expected = parseInt((headerCount() || "").replace(/,/g, ""), 10) || null;
+      let last = -1, lastGrowth = Date.now();
+      for (let k = 0; k < 800; k++) {
         iterations = k + 1;
         collect(list.innerText);
-        scroller.scrollTop = scroller.scrollHeight;
+        const n = countAges(list.innerText);
+        if (n !== last) { last = n; lastGrowth = Date.now(); }
+        const quiet = Date.now() - lastGrowth;
+        // pump.fun rate-limits the page loads (about six per minute), so a pause of
+        // a minute or more in the middle of a long list is normal
+        if (quiet > 20_000 && (expected === null || n >= expected)) break;
+        if (n === 0 && quiet > 45_000 && UNAVAILABLE_RE.test(list.innerText)) break; // reported below
+        if (quiet > STALL_GIVE_UP_MS) { progress(`no new rows for ${Math.round(STALL_GIVE_UP_MS / 60_000)} min at ${n}${expected ? "/" + expected : ""}; stopping`); break; }
+        scroller.scrollTop = k % 2 ? Math.max(0, scroller.scrollHeight - 1500) : scroller.scrollHeight;
         const more = clickables(dialog).find((e) => visible(e) && /load more|show more|see more/i.test(text(e)));
         if (more) more.click();
-        await sleep(600);
-        if (blocks.size === last) stable++; else { stable = 0; last = blocks.size; }
-        if (k % 20 === 19) progress(`scroll ${k + 1}, ${blocks.size} rows`);
+        // Scroll briskly while rows keep coming. Once the loader stalls (pump.fun answers
+        // 429 after ~5 pages), every further scroll is another refused request that keeps
+        // the limit alive, so leave the page alone for a while before the next nudge.
+        if (quiet < 5_000) await sleep(k % 2 ? 300 : 600);
+        else { progress(`loader paused at ${n}${expected ? "/" + expected : ""} rows; waiting ${STALL_REST_MS / 1000} s`); await sleep(STALL_REST_MS); }
+        if (k % 40 === 39) progress(`scroll ${k + 1}, ${n}${expected ? "/" + expected : ""} rows`);
         if (Date.now() - t0 > HARD_LIMIT_MS) { progress("time limit reached; stopping scroll"); break; }
       }
+      if (countAges(list.innerText) === 0 && UNAVAILABLE_RE.test(list.innerText)) {
+        // pump.fun's own error state: the callouts request was refused (rate limit).
+        // Report a failure so the collector retries this profile later, and leave the page alone.
+        return send(fail("callout history unavailable (pump.fun shows 'Could not load callout history right now'; usually a rate limit)", { ...m, state: "unavailable", expected }));
+      }
+      scroller.scrollTop = scroller.scrollHeight;
+      await sleep(400);
       collect(list.innerText);
       modalText = list.innerText;
     } else {
@@ -210,7 +240,8 @@
       modalText,
       blocks: [...blocks],
       dialogText,
-      rowsSeen: countRows(modalText),
+      rowsSeen: countAges(modalText),
+      statsRows: countRows(modalText),
       iterations,
       durationMs: Date.now() - t0,
       endpoints: endpoints(),

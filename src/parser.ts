@@ -96,9 +96,10 @@ const dateOnlyRe = new RegExp(`^(?:${MONTHS})[a-z]*\\.?\\s+\\d{1,2}(?:,?\\s*\\d{
 export const multRe = /^(\d+(?:\.\d+)?)x$/i;
 // Original: /MC$/
 export const mcLineRe = /MC$/;
-export const mcPartsRe = /\$?([\d.,]+\s*[KMB]?)\s*(?:→|->|➔|⟶|=>)\s*\$?([\d.,]+\s*[KMB]?)\s*MC$/i;
+// ext: the peak side may be a dash ("$158K → — MC": no peak recorded yet).
+export const mcPartsRe = /\$?([\d.,]+\s*[KMB]?)\s*(?:→|->|➔|⟶|=>)\s*(\$?[\d.,]+\s*[KMB]?|—|–|-)\s*MC$/i;
 const mcValueRe = /^\$[\d.,]+[KMB]?$/i;
-const mcEndRe = /^\$[\d.,]+[KMB]?\s*MC$/i;
+const mcEndRe = /^(\$[\d.,]+[KMB]?|—|–|-)\s*MC$/i;
 const dotOnlyRe = /^[·•]$/;
 /** Lines that are values, never token names (used when a row's name line is missing). */
 const valueLikeRe = /^([+\-]?\$[\d.,]+[KMB]?(\s*MC)?|[—–-]|\d+(?:\.\d+)?x|[·•])$/i;
