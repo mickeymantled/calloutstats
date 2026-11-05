@@ -33,9 +33,13 @@ The protocol between the extension and the collector is `../docs/collector-proto
    click **Load unpacked**, select this `extension/` folder.
 4. Click the extension's icon: the popup should say the collector is **online**. Type
    `mickeymantled` into the handle box and press **Run one**. A separate window opens,
-   visits the profile, scrolls the callouts, closes. The collector log
-   (`data/logs/<date>.log`) shows the parsed row count; `npm run verify`-style output is
-   in the collector's terminal.
+   visits the profile, opens View stats, switches the range to 1M, scrolls the callouts,
+   closes. The collector log (`data/logs/<date>.log`) shows the parsed row count and the
+   range used; `npm run verify`-style output is in the collector's terminal.
+4b. After any change to the files in `extension/`, open `chrome://extensions` and press
+   the circular **reload** arrow on the Callout Check card; otherwise Chrome keeps running
+   the old service worker. `npm run collector` must be restarted too when
+   `src/collector/` changes.
 5. Leave Chrome running. The extension polls the collector once a minute and starts the
    daily run when the collector says it is due (`scheduleHourLocal` in `config.json`,
    default 06:00 local, Pacific on this Mac).
@@ -55,6 +59,10 @@ extensions; dismiss it, the extension stays loaded.
 - A run never starts: check the **enabled** box, and `GET http://127.0.0.1:47831/due`.
 - Profiles fail with "verification page shown": open pump.fun in that Chrome profile by
   hand and complete the check once; the session persists.
+- The leaderboard reports "verification page shown" on every run: as of 2026-11-04
+  pump.fun challenges `/leaderboard` even for sessions that load profiles freely. The
+  extension waits up to 45 s for the interstitial to clear by itself and then moves on;
+  the run still collects every handle in `config.json`, only the rewards column is empty.
 - Profiles fail with "Stats control not found" or "blocked by a dialog": pump.fun changed
   the page, or a first-visit dialog is up in that profile; open the page by hand, dismiss
   it, retry. The raw text of every attempt is in `data/raw/<handle>.txt`.

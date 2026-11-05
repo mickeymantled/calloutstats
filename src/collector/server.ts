@@ -515,7 +515,9 @@ export function createCollector(opts: CollectorOptions = {}): Collector {
       upsertKol(db, { handle, displayName: str(body.displayName), avatarUrl: str(body.avatarUrl), profileUrl: str(body.url) ?? profileUrl(handle), source: run.explicitHandles ? "config" : "leaderboard" });
       storeProfileResult(db, handle, run.runId, rows, header, "dom", at);
       run.ok++;
-      logger.info(`${tag}: ok, ${rows.length} callouts (header: ${header.callouts ?? "?"} callouts, ${header.tailers ?? "?"} tailers, tail volume ${header.tailVolume ?? "?"}; ${num(body.iterations) ?? "?"} scroll steps, ${num(body.durationMs) ?? "?"} ms)`);
+      const range = str(body.range);
+      logger.info(`${tag}: ok, ${rows.length} callouts${range ? ` in range ${range}` : ""} (header: ${header.callouts ?? "?"} callouts, ${header.tailers ?? "?"} tailers, tail volume ${header.tailVolume ?? "?"}; ${num(body.iterations) ?? "?"} scroll steps, ${num(body.durationMs) ?? "?"} ms)`);
+      if (header.callouts !== null && rows.length < header.callouts) logger.warn(`${tag}: the list showed ${rows.length} of ${header.callouts} callouts the header counts; pump.fun caps the list, older callouts come from earlier runs`);
       return ok({ status: "ok", rows: rows.length, header: headerOut(header), zeroCallouts });
     }
     return retryOrFail(`no rows parsed (state=${pageState}, header callouts=${header.callouts ?? "?"})`);

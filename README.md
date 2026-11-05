@@ -30,6 +30,24 @@ Other routes that still work: manual captures with the console script (next sect
 the Playwright scraper for interactive runs (`npm run scrape`, you click the checkbox once).
 Nothing in this repo hides automation from Cloudflare or spoofs a browser.
 
+What the first real runs (2026-11-04) showed, and what the code now does about it:
+
+- The profile button reads **View stats**; the modal opens on the **LAST ROUND** range and
+  offers TODAY / 1W / 1M. The extension switches to the widest range (All if it ever
+  appears, else 1M) and reports which one it used.
+- Rows render as a stack of flex items, so the modal text has one value per line with a
+  Unicode minus sign. `src/parser.ts` (`normalizeLines`) folds that back into the
+  single-line layout the console script expected; `src/parser.realrows.test.ts` pins the
+  real text.
+- The list loads 40 rows per scroll and **stops at 220 rows** even when the header counts
+  more (473 for mickeymantled's 1M). Newest first, so a daily run keeps up with anyone
+  doing fewer than ~220 callouts a day; older history is whatever earlier runs captured.
+  The collector logs "the list showed N of M callouts" when this happens.
+- **`/leaderboard` is behind a Cloudflare interstitial** even for a browser session that
+  loads profiles without one. The extension waits up to 45 s for it to clear by itself and
+  never interacts with it; until it clears, runs use the handles from `config.json` and
+  the rewards column stays empty.
+
 ## Prerequisites
 
 - Node 22 (`node --version`); `engines` allows >= 20 but 22 is what this runs on.
@@ -298,4 +316,10 @@ npm run typecheck   # tsc --noEmit
 - Values are rounded as pump.fun rounds them (`$2.01M`, `+$9K`); `reached —` is stored as
   null and excluded from the peak count and median.
 - Leaderboard rewards are read as displayed (USD or SOL, see `rewards_unit`); the
-  rewards-to-peak ratio is only meaningful when the peak sum is positive.
+  rewards-to-peak ratio is only meaningful when the peak sum is positive. As of 2026-11-04
+  the leaderboard page is behind a Cloudflare interstitial, so rewards are empty until
+  that changes.
+- pump.fun's callout list shows at most ~220 callouts per range (newest first) while the
+  header counts them all. Header totals (`callouts`, `tailers`, `tail volume`) therefore
+  can exceed the sums of the rows we store; the header `tailers` figure also counts unique
+  tailers, not the per-row sum. Totals on the site are sums over stored rows.

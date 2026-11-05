@@ -94,9 +94,11 @@ Body:
   "error": "optional message when failed/notfound",
   "displayName": "mickeymantled", "avatarUrl": "https://..." | null,
   "modalText": "innerText of the callouts list element after scrolling (<=2 MB)",
-  "blocks": ["unique 10-line blocks around each row seen during scrolling, joined with \n", ...],
+  "blocks": ["unique 16-line blocks around each row seen during scrolling, joined with \n", ...],
   "dialogText": "innerText of the whole stats dialog (header totals live here)",
   "state": "rows" | "empty" | "unknown",
+  "range": "1M" | "All" | null,
+  "rowsSeen": 220,
   "iterations": 37, "durationMs": 14000,
   "endpoints": ["https://frontend-api-v3.pump.fun/...?x=1", ...],
   "screenshotDataUrl": null }
@@ -127,10 +129,15 @@ Port of `pumpfun_callout_check.js` and `src/scraper/profile.ts`, in plain JS:
 1. Wait for `document.readyState === "complete"` plus 800 ms. If body text matches
    /profile not found|user not found|page not found/i and contains no "Stats", report
    `notfound`.
-2. Click the "Stats" control (button/tab/link whose trimmed text is exactly "Stats",
-   case-insensitive). Wait until body text matches /tail volume|callouts/i (<=15 s).
+2. Click the Stats control (button/tab/link whose trimmed text is exactly "Stats" or
+   "View stats", case-insensitive; wait <=10 s for it to render). Wait until body text
+   matches /tail volume|callouts/i (<=15 s).
 3. Inside `[role=dialog]` (last one) click the tab/button whose text is exactly
    "Callouts". Wait 900 ms.
+3b. Time range: the modal defaults to "LAST ROUND". Click the range tab "All" / "All time"
+   if present, else "1M" (the widest offered on 2026-11-04), unless it is already
+   `aria-selected`; wait until the header's callout count changes (<=8 s) + 1.2 s. Report
+   the label as `range`.
 4. Sort: if a control with text /recent|newest/i exists, make sure it is selected; a
    `<select>` with such an option counts. Best effort.
 5. Wait (<=15 s) until body text has /\btailers?\b/ and /reached/ ("rows"), or
@@ -140,17 +147,39 @@ Port of `pumpfun_callout_check.js` and `src/scraper/profile.ts`, in plain JS:
    children also does. `dialog` = its closest `[role=dialog]` or itself. `scroller` = the
    descendant of `dialog` with overflow-y auto|scroll and the largest scrollHeight
    (> clientHeight + 10), else the list element.
-7. Loop (max 400, stop after 4 consecutive iterations with no new rows): take
-   `list.innerText`, split lines, for every line matching the row regex
-   `(\d[\d,]*)\s*tailers?\s*[·•]\s*1h\s*[+\-]?\$[\d.,]+[KMB]?\s*[·•]\s*1d\s*[+\-]?\$[\d.,]+[KMB]?\s*[·•]\s*reached\s*([+\-]?\$[\d.,]+[KMB]?|—|-)` (case-insensitive)
-   add the block `lines[i-6 .. i+3].join("\n")` to a Set; then
+7. Loop (max 400, stop after 6 consecutive iterations with no new rows): take
+   `list.innerText`, split lines, for every line matching the row-start regex
+   `^\d[\d,]*\s*tailers?\b` (case-insensitive) add the block
+   `lines[i-7 .. i+8].join("\n")` to a Set; then
    `scroller.scrollTop = scroller.scrollHeight`; click any visible button with text
-   /load more|show more/i; wait 350 ms.
+   /load more|show more/i; wait 600 ms. The list loads 40 more rows per scroll and, on
+   2026-11-04, stopped at 220 rows although the header counted 473 (see "Real layout").
 8. Report `modalText` (final `list.innerText`), `blocks` (the Set), `dialogText`
-   (`dialog.innerText`), `endpoints` (URLs from `performance.getEntriesByType("resource")`
-   with initiatorType fetch/xmlhttprequest and hostname containing "pump"),
-   `displayName` (og:title or first h1), `avatarUrl` (og:image or an img whose alt
-   contains the handle). Press Escape at the end.
+   (`dialog.innerText`), `range`, `rowsSeen` (row-start lines in modalText), `endpoints`
+   (URLs from `performance.getEntriesByType("resource")` with initiatorType
+   fetch/xmlhttprequest and hostname containing "pump"), `displayName` (og:title or first
+   h1), `avatarUrl` (og:image or an img whose alt contains the handle). Press Escape at
+   the end.
+
+Real layout (pump.fun/profile/mickeymantled, 2026-11-04). The modal's innerText is one
+item per line; the parser's `normalizeLines()` folds it back into the console script's
+single-line form, so captures from either era parse the same way:
+
+```
+Stats / @mickeymantled / Callouts / Streaks / Volume / LAST ROUND / TODAY / 1W / 1M
+Callouts / 13 / 7 new · 6 earlier / Tailers / 1,899 / Top 0.25% of 5,173 / Tail volume / $120K / Top 0.25% of 5,173
+Callouts / Recent
+X / · / 19h ago / 1.1x / $152K / $178K MC / 50 tailers · 1h / −$1K / · 1d / — / · reached / +$1K
+...
+Performance / Reached 2x+ / 69.2% / 13 calls / ... / Outcome spread / 1.0x / ... / Updated Nov 4, 2026, 6:57 PM
+```
+
+Negative values use U+2212 MINUS SIGN; "—" means no value (also for 1d on callouts younger
+than a day); the multiplier and "entry → peak MC" sit above the stats line. Header
+tailers (1,899) is not the sum of the rows' tailers (2,367): pump.fun counts unique
+tailers there. `/leaderboard` answered with a Cloudflare interstitial ("Just a moment...",
+HTTP 403) even in a browser that loads profiles without one; background.js waits up to
+45 s for it to clear on its own and otherwise reports the page as failed.
 
 Leaderboard page: click "Top rewards"; for each view click the control whose text
 matches all-time (/all[\s-]?time|^all$/i), monthly (/month/i), weekly (/week/i),

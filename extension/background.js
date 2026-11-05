@@ -307,12 +307,32 @@ async function doFinish(run, aborted) {
 // ---------- tab helpers ----------
 const isGone = (e) => /No tab with id|No window with id|closed|Tabs cannot be edited/i.test(e?.message || "");
 
+// Cloudflare sometimes shows its "Just a moment..." interstitial (seen on
+// /leaderboard). This only waits, passively, for the page to move on by itself;
+// it never touches the interstitial. If it stays, the content script reports
+// "verification page shown" and the run goes on without that page.
+const VERIFY_WAIT_MS = 45_000;
+async function settleVerification(tabId) {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const end = Date.now() + VERIFY_WAIT_MS;
+  let sawIt = false;
+  for (;;) {
+    let tab;
+    try { tab = await chrome.tabs.get(tabId); } catch { return; }
+    const onIt = /just a moment/i.test(tab.title || "");
+    if (!onIt && tab.status === "complete") { if (sawIt) await wait(800); return; }
+    if (Date.now() > end) return;
+    if (onIt && !sawIt) { sawIt = true; log("warn", `verification page on ${tab.url || "?"}; waiting up to ${VERIFY_WAIT_MS / 1000}s for it to clear`); }
+    await wait(1000);
+  }
+}
+
 function navigate(tabId, url) {
   return new Promise((resolve, reject) => {
     const done = (fn, v) => { clearTimeout(timer); chrome.tabs.onUpdated.removeListener(onUpdated); fn(v); };
-    const timer = setTimeout(() => done(reject, new Error(`navigation timeout: ${url}`)), NAV_TIMEOUT_MS);
+    const timer = setTimeout(() => done(reject, new Error(`navigation timeout: ${url}`)), NAV_TIMEOUT_MS + VERIFY_WAIT_MS);
     const onUpdated = (id, info) => {
-      if (id === tabId && info.status === "complete") setTimeout(() => done(resolve), 800);
+      if (id === tabId && info.status === "complete") setTimeout(() => settleVerification(tabId).then(() => done(resolve), () => done(resolve)), 800);
     };
     chrome.tabs.onUpdated.addListener(onUpdated);
     chrome.tabs.update(tabId, { url }).catch((e) => done(reject, e));

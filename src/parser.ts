@@ -5,6 +5,17 @@
  * regexes, K/M number parsing, name/age back-walk, multiplier/MC forward-walk,
  * row dedup key and the scroll-until-stable loop all come from that script.
  * Extensions over the original are marked with "ext:" comments.
+ *
+ * ext: pump.fun's current Stats modal (seen 2026-11-04) renders every row as a
+ * stack of flex items, so innerText splits one callout over a dozen lines:
+ *
+ *   X            ·            19h ago      1.1x         $152K        $178K MC
+ *   50 tailers · 1h    −$1K    · 1d    —    · reached    +$1K
+ *
+ * normalizeLines() folds that back into the single-line layout the console
+ * script was written for ("X · 19h ago", "1.1x", "$152K → $178K MC",
+ * "50 tailers · 1h -$1K · 1d — · reached +$1K") before harvest() runs, so both
+ * layouts parse the same way.
  */
 
 export interface ParsedRow {
@@ -37,10 +48,15 @@ export interface HeaderTotals {
   tailVolume: number | null;
 }
 
-/** "+$2K" -> 2000, "-$1.2M" -> -1200000, "—" -> null. ext: also accepts B. */
+/** "—", "–" or "-" on its own: pump.fun's "no value". */
+const DASH_ONLY = /^[—–-]$/;
+
+/** "+$2K" -> 2000, "-$1.2M" -> -1200000, "—" -> null. ext: also accepts B and the Unicode minus. */
 export const toNum = (s: string | null | undefined): number | null => {
-  if (!s || s === "—" || s === "-") return null;
-  const neg = s.trim().startsWith("-");
+  if (!s) return null;
+  s = s.replace(/[−–]/g, "-").trim(); // ext: U+2212 MINUS SIGN / en dash -> "-"
+  if (DASH_ONLY.test(s)) return null;
+  const neg = s.startsWith("-");
   const m = s.replace(/[+\-$,\s]/g, "").match(/^([\d.]+)([KMB]?)$/i);
   if (!m) return null;
   let v = parseFloat(m[1]);
@@ -52,17 +68,21 @@ export const toNum = (s: string | null | undefined): number | null => {
 };
 
 // Original: /(\d[\d,]*)\s*tailers\s*·\s*1h\s*([+\-]\$[\d.,]+[KM]?)\s*·\s*1d\s*([+\-]\$[\d.,]+[KM]?)\s*·\s*reached\s*([+\-]\$[\d.,]+[KM]?|—)/i
-// ext: separator may be · or •, sign is optional, "tailer" singular, B suffix.
+// ext: separator may be · or •, sign is optional, "tailer" singular, B suffix,
+// and every value (not only "reached") may be a dash ("1d —" on callouts younger than a day).
 const SEP = "\\s*[·•]\\s*";
-const AMT = "([+\\-]?\\$[\\d.,]+[KMB]?)";
+const VAL = "([+\\-]?\\$[\\d.,]+[KMB]?|—|–|-)";
 export const rowRe = new RegExp(
-  `(\\d[\\d,]*)\\s*tailers?${SEP}1h\\s*${AMT}${SEP}1d\\s*${AMT}${SEP}reached\\s*([+\\-]?\\$[\\d.,]+[KMB]?|—|-)`,
+  `(\\d[\\d,]*)\\s*tailers?${SEP}1h\\s*${VAL}${SEP}1d\\s*${VAL}${SEP}reached\\s*${VAL}`,
   "i",
 );
+/** ext: first line of a stats row, whether or not the values are on the same line. */
+export const rowStartRe = /^\d[\d,]*\s*tailers?\b/i;
 
 // Original: /^(.*?)\s*·?\s*(\d+)\s*([mhd])\s*ago$/i
 // ext: s / min / w / mo / y units, • separator.
 export const agoRe = /^(.*?)\s*[·•]?\s*(\d+)\s*(min|mo|[smhdwy])\s*ago$/i;
+const ageOnlyRe = /^\d+\s*(?:min|mo|[smhdwy])\s*ago$/i;
 
 // ext: fallback for rows that show an absolute date instead of "x ago".
 const MONTHS = "jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec";
@@ -70,12 +90,18 @@ export const dateRe = new RegExp(
   `^(.*?)\\s*[·•]?\\s*((?:${MONTHS})[a-z]*\\.?\\s+\\d{1,2}(?:,?\\s*(\\d{4}))?)$`,
   "i",
 );
+const dateOnlyRe = new RegExp(`^(?:${MONTHS})[a-z]*\\.?\\s+\\d{1,2}(?:,?\\s*\\d{4})?$`, "i");
 
 // Original: /^(\d+)x$/   ext: allows decimals ("1.5x").
 export const multRe = /^(\d+(?:\.\d+)?)x$/i;
 // Original: /MC$/
 export const mcLineRe = /MC$/;
 export const mcPartsRe = /\$?([\d.,]+\s*[KMB]?)\s*(?:→|->|➔|⟶|=>)\s*\$?([\d.,]+\s*[KMB]?)\s*MC$/i;
+const mcValueRe = /^\$[\d.,]+[KMB]?$/i;
+const mcEndRe = /^\$[\d.,]+[KMB]?\s*MC$/i;
+const dotOnlyRe = /^[·•]$/;
+/** Lines that are values, never token names (used when a row's name line is missing). */
+const valueLikeRe = /^([+\-]?\$[\d.,]+[KMB]?(\s*MC)?|[—–-]|\d+(?:\.\d+)?x|[·•])$/i;
 
 const unitToDays = (unit: string, n: number): number => {
   switch (unit.toLowerCase()) {
@@ -113,46 +139,103 @@ export function splitLines(text: string): string[] {
 }
 
 /**
- * harvest(): port of the console script's loop. Scans every line for a stats
- * row, walks back up to 6 lines for the token name + age, walks forward up to
- * 3 lines for the multiplier and MC line. Returns rows keyed exactly as the
- * console script keyed them so repeated harvests during scrolling dedup.
+ * ext: fold pump.fun's multi-line row layout into the console script's single-line layout.
+ * Idempotent: text that is already single-line comes back unchanged (apart from the
+ * Unicode minus, which becomes "-" everywhere so toNum/rowRe see one sign).
  */
-export function harvest(lines: string[], into: Map<string, ParsedRow> = new Map(), now: Date = new Date()): Map<string, ParsedRow> {
+export function normalizeLines(lines: string[]): string[] {
+  const src = lines.map((l) => l.replace(/[−–]\s*(?=\$)/g, "-").trim()).filter(Boolean);
+  const out: string[] = [];
+  for (let i = 0; i < src.length; i++) {
+    const l = src[i];
+    const next = src[i + 1];
+    // "name" / "·" / "19h ago"  ->  "name · 19h ago"
+    if (dotOnlyRe.test(l) && next !== undefined && (ageOnlyRe.test(next) || dateOnlyRe.test(next))) {
+      const prev = out[out.length - 1];
+      if (prev !== undefined && !valueLikeRe.test(prev) && !rowRe.test(prev) && !agoRe.test(prev)) {
+        out.pop();
+        out.push(`${prev} · ${next}`);
+      } else {
+        out.push(`· ${next}`); // name line missing: harvest() will report "?"
+      }
+      i += 1;
+      continue;
+    }
+    // "$152K" / "$178K MC"  ->  "$152K → $178K MC"
+    if (mcValueRe.test(l) && next !== undefined && mcEndRe.test(next)) {
+      out.push(`${l} → ${next}`);
+      i += 1;
+      continue;
+    }
+    // "50 tailers · 1h" / "−$1K" / "· 1d" / "—" / "· reached" / "+$1K"  ->  one stats line
+    if (rowStartRe.test(l) && !rowRe.test(l)) {
+      let joined = l;
+      let end = i;
+      for (let j = i + 1; j < Math.min(src.length, i + 10); j++) {
+        joined += ` ${src[j]}`;
+        if (rowRe.test(joined)) { end = j; break; }
+      }
+      if (end > i) { out.push(joined); i = end; continue; }
+    }
+    out.push(l);
+  }
+  return out;
+}
+
+const fallbackName = (line: string | undefined): string => (line && !valueLikeRe.test(line) && !rowRe.test(line) ? line : "?");
+
+/**
+ * harvest(): port of the console script's loop. Scans every line for a stats
+ * row, walks back up to 8 lines for the token name + age (picking up the
+ * multiplier and MC line on the way, where pump.fun now puts them), then walks
+ * forward up to 3 lines for whatever is still missing (the original layout).
+ * Returns rows keyed exactly as the console script keyed them so repeated
+ * harvests during scrolling dedup.
+ */
+export function harvest(rawLines: string[], into: Map<string, ParsedRow> = new Map(), now: Date = new Date()): Map<string, ParsedRow> {
+  const lines = normalizeLines(rawLines);
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(rowRe);
     if (!m) continue;
-    // walk back for name + age
+    // walk back for name + age (ext: and for the multiplier / MC shown above the stats line)
     let name = "?", ageDays: number | null = null, ageRaw: string | null = null;
-    for (let j = i - 1; j >= Math.max(0, i - 6); j--) {
+    let mult: number | null = null, mc = "";
+    let backMult: number | null = null, backMc = "", found = false;
+    for (let j = i - 1; j >= Math.max(0, i - 8); j--) {
       if (rowRe.test(lines[j])) break; // ext: don't walk into the previous row
       const a = lines[j].match(agoRe);
       if (a) {
-        name = a[1] || (lines[j - 1] || "?");
+        name = a[1] || fallbackName(lines[j - 1]);
         const n = parseInt(a[2], 10);
         ageDays = unitToDays(a[3], n);
         ageRaw = `${a[2]}${a[3]} ago`;
+        found = true;
         break;
       }
       const d = lines[j].match(dateRe); // ext: absolute date fallback
       if (d) {
         const days = dateTextToAgeDays(d[2], now);
         if (days !== null) {
-          name = d[1] || (lines[j - 1] || "?");
+          name = d[1] || fallbackName(lines[j - 1]);
           ageDays = days;
           ageRaw = d[2];
+          found = true;
           break;
         }
       }
+      const x = lines[j].match(multRe);
+      if (x && backMult === null) backMult = parseFloat(x[1]);
+      if (mcLineRe.test(lines[j]) && !backMc) backMc = lines[j];
     }
-    // walk forward for multiplier + MC
-    let mult: number | null = null, mc = "";
+    // only trust what sat between this row's name line and its stats line
+    if (found) { mult = backMult; mc = backMc; }
+    // walk forward for multiplier + MC (original layout)
     for (let j = i + 1; j < Math.min(lines.length, i + 4); j++) {
       // ext: stop at the next row so a row without a multiplier doesn't borrow the next one's
       if (rowRe.test(lines[j]) || agoRe.test(lines[j]) || dateRe.test(lines[j])) break;
       const x = lines[j].match(multRe);
-      if (x) mult = parseFloat(x[1]);
-      if (mcLineRe.test(lines[j])) mc = lines[j];
+      if (x && mult === null) mult = parseFloat(x[1]);
+      if (mcLineRe.test(lines[j]) && !mc) mc = lines[j];
     }
     let entryMc: number | null = null, peakMc: number | null = null;
     const mp = mc.match(mcPartsRe);
@@ -191,9 +274,10 @@ const numericLine = (s: string | undefined): number | null => {
 
 /**
  * Header totals shown at the top of the Stats modal: Callouts, Tailers, Tail volume.
- * Tolerates "Label\nValue", "Value\nLabel" and "Label 123" layouts. The three
- * labels are expected in that order; when all three are found two lines apart the
- * layout is decided globally (does a value follow the last label, or precede the first?).
+ * Tolerates "Label\nValue", "Value\nLabel" and "Label 123" layouts, with extra lines
+ * between the pairs ("7 new · 6 earlier", "Top 0.25% of 5,173"). The three labels are
+ * expected in that order; when all three are found two lines apart the layout is decided
+ * globally (does a value follow the last label, or precede the first?).
  */
 export function parseHeaderTotals(lines: string[]): HeaderTotals {
   const labels = [/^callouts$/i, /^tailers$/i, /^tail volume$/i];

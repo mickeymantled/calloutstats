@@ -7,49 +7,80 @@
 <meta property="og:image" content="https://example.invalid/avatar.png">
 <style>
   body { font-family: sans-serif; background: #111; color: #eee; padding: 16px; }
-  #dialog { border: 1px solid #555; padding: 8px; margin-top: 12px; width: 520px; }
+  #dialog { border: 1px solid #555; padding: 8px; margin-top: 12px; width: 560px; }
   #list { height: 260px; overflow-y: auto; border: 1px solid #333; padding: 4px; }
-  .row { padding: 4px 0; border-bottom: 1px solid #222; }
+  .row { padding: 4px 0; border-bottom: 1px solid #222; display: flex; flex-wrap: wrap; gap: 4px; }
+  .row > div { display: block; }
+  [role=tab][aria-selected=true] { background: #fff; color: #000; }
   pre { white-space: pre-wrap; background: #000; padding: 8px; }
 </style>
 </head>
 <body>
 <!--
-  Smoke test for content-profile.js: a fake pump.fun profile page with a Stats
-  button that opens a dialog (header totals, tabs, a scrollable 60-row list) in
-  the text shape the parser expects. chrome.runtime.sendMessage is stubbed so the
-  script's result lands on the page. Open this file in Chrome (file://) and read
-  the summary at the bottom; or open it from the Claude browser pane.
+  Smoke test for content-profile.js: a fake pump.fun profile page shaped like the
+  real one on 2026-11-04. "View stats" opens a dialog with the header totals,
+  the Callouts/Streaks/Volume tabs, the LAST ROUND/TODAY/1W/1M range tabs
+  (LAST ROUND selected, 13 rows; 1M has 60 rows loaded 20 at a time on scroll),
+  a "Recent" sort button, rows split over twelve flex items with a U+2212 minus,
+  and the Performance footer. chrome.runtime.sendMessage is stubbed so the
+  script's result lands on the page. Serve it with `node extension/test/serve.mjs`
+  and read the summary at the bottom.
 -->
 <h1>mickeymantled</h1>
-<p>Fake profile page. <button id="stats">Stats</button></p>
+<p>Fake profile page. <button id="stats">View stats</button></p>
 <div id="root"></div>
 <h2>Result</h2>
 <pre id="out">waiting for the content script…</pre>
 <script>
   // ---- fixture ----
-  const rows = Array.from({ length: 60 }, (_, i) => {
+  const MINUS = "−";
+  const row = (i) => {
     const reached = i % 5 === 0 ? "—" : `+$${(i + 1) * 10}K`;
-    const pnl1h = i % 7 === 0 ? `-$${i + 1}K` : `+$${i + 1}K`;
-    const mult = i % 3 === 0 ? "" : `<div>${i + 2}x</div>`;
-    return `<div class="row"><div>TOKEN${i} · ${i + 1}d ago</div><div>${100 + i} tailers · 1h ${pnl1h} · 1d +$${(i + 1) * 2}K · reached ${reached}</div>${mult}<div>$39.3K → $2.01M MC</div></div>`;
-  }).join("");
+    const pnl1h = i % 7 === 0 ? `${MINUS}$${i + 1}K` : `+$${i + 1}K`;
+    const pnl1d = i % 4 === 0 ? "—" : i % 6 === 0 ? `${MINUS}$${(i + 1) * 2}K` : `+$${(i + 1) * 2}K`;
+    const mult = i % 3 === 0 ? "" : `<div>${i % 3 === 1 ? (i + 2) + ".5" : i + 2}x</div>`;
+    const age = i < 3 ? `${(i + 1) * 5}h ago` : `${i - 1}d ago`;
+    return `<div class="row"><div>TOKEN${i}</div><div>·</div><div>${age}</div>${mult}<div>$${39 + i}.3K</div><div>$${2 + i}.01M MC</div>` +
+      `<div>${100 + i} tailers · 1h</div><div>${pnl1h}</div><div>· 1d</div><div>${pnl1d}</div><div>· reached</div><div>${reached}</div></div>`;
+  };
+  const RANGES = { "LAST ROUND": { total: 13, tailers: "1,899", volume: "$120K" }, "TODAY": { total: 3, tailers: "190", volume: "$12K" }, "1W": { total: 30, tailers: "6.1K", volume: "$600K" }, "1M": { total: 60, tailers: "12.4K", volume: "$1.2M" } };
+  const PAGE = 20;
+  let range = "LAST ROUND", shown = 0;
+  const footer = `<div>Performance</div><div>Reached 2x+</div><div>69.2%</div><div>13 calls</div><div>Avg</div><div>7.1x</div><div>Outcome spread</div><div>1.0x</div><div>1.1x</div><div>20.0x+</div><div>Updated Nov 4, 2026, 6:57 PM</div>`;
+  const renderHeader = () => {
+    const r = RANGES[range];
+    document.getElementById("header").innerHTML = `<div>Callouts</div><div>${r.total}</div><div>7 new · 6 earlier</div><div>Tailers</div><div>${r.tailers}</div><div>Top 0.25% of 5,173</div><div>Tail volume</div><div>${r.volume}</div><div>Top 0.25% of 5,173</div>`;
+    for (const b of document.querySelectorAll("#ranges [role=tab]")) b.setAttribute("aria-selected", String(b.textContent === range));
+  };
+  const renderList = (reset) => {
+    const list = document.getElementById("list");
+    if (reset) { shown = 0; list.innerHTML = `<div>Callouts</div><button id="sort">Recent</button><div id="rows"></div>${footer}`; }
+    const total = RANGES[range].total;
+    const next = Math.min(total, shown + PAGE);
+    let html = "";
+    for (let i = shown; i < next; i++) html += row(i);
+    document.getElementById("rows").insertAdjacentHTML("beforeend", html);
+    shown = next;
+  };
   document.getElementById("stats").addEventListener("click", () => {
     document.getElementById("root").innerHTML = `
       <div id="dialog" role="dialog">
-        <div>Callouts</div><div>60</div><div>Tailers</div><div>12.4K</div><div>Tail volume</div><div>$1.2M</div>
-        <div role="tablist"><button role="tab" id="tab-callouts">Callouts</button><button role="tab">Trades</button></div>
-        <button id="sort">Sort: Multiplier</button>
+        <div>Stats</div><div>@mickeymantled</div>
+        <div role="tablist"><button role="tab" id="tab-callouts" aria-selected="true">Callouts</button><button role="tab" aria-selected="false">Streaks</button><button role="tab" aria-selected="false">Volume</button></div>
+        <div role="tablist" id="ranges">${Object.keys(RANGES).map((k) => `<button role="tab">${k}</button>`).join("")}</div>
+        <div id="header"></div>
         <div id="list"></div>
       </div>`;
-    document.getElementById("sort").addEventListener("click", () => {
-      const menu = document.createElement("div");
-      menu.innerHTML = `<div role="menuitem">Recent</div><div role="menuitem">Largest multiplier</div>`;
-      document.getElementById("dialog").appendChild(menu);
-      menu.querySelector("[role=menuitem]").addEventListener("click", () => { document.getElementById("sort").textContent = "Sort: Recent"; menu.remove(); });
-    });
+    renderHeader();
     // the list fills in only after the Callouts tab is clicked, like a real tab switch
-    document.getElementById("tab-callouts").addEventListener("click", () => { document.getElementById("list").innerHTML = rows; });
+    document.getElementById("tab-callouts").addEventListener("click", () => renderList(true));
+    for (const b of document.querySelectorAll("#ranges [role=tab]")) {
+      b.addEventListener("click", () => { range = b.textContent; renderHeader(); setTimeout(() => renderList(true), 400); });
+    }
+    const list = document.getElementById("list");
+    list.addEventListener("scroll", () => {
+      if (list.scrollTop + list.clientHeight >= list.scrollHeight - 5) setTimeout(() => renderList(false), 250);
+    });
   });
 
   // ---- stub the extension messaging ----
@@ -58,15 +89,17 @@
   window.__ccArgs = { token: "smoke", handle: "mickeymantled" };
   function show(r) {
     const summary = {
-      status: r.status, state: r.state, error: r.error ?? null, iterations: r.iterations,
-      blocks: r.blocks ? r.blocks.length : null,
+      status: r.status, state: r.state, error: r.error ?? null, range: r.range ?? null, iterations: r.iterations,
+      blocks: r.blocks ? r.blocks.length : null, rowsSeen: r.rowsSeen ?? null,
       modalTextLines: r.modalText ? r.modalText.split("\n").filter(Boolean).length : 0,
       dialogHasHeader: /Tail volume/.test(r.dialogText || ""),
       displayName: r.displayName, avatarUrl: r.avatarUrl,
-      firstBlock: r.blocks && r.blocks[0], sortLabel: document.getElementById("sort")?.textContent ?? null,
+      firstBlock: r.blocks && r.blocks[0], lastBlock: r.blocks && r.blocks[r.blocks.length - 1],
+      sortLabel: document.getElementById("sort")?.textContent ?? null,
       progress: window.__ccMsgs.filter((m) => m.type === "progress").map((m) => m.msg),
     };
     window.__ccResult = summary;
+    window.__ccFull = r;
     document.getElementById("out").textContent = JSON.stringify(summary, null, 2);
   }
   // run the real content script once the page is ready
