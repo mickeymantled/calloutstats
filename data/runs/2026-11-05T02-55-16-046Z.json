@@ -1,0 +1,21 @@
+{
+  "runId": 1,
+  "status": "partial",
+  "total": 1,
+  "ok": 0,
+  "failed": 1,
+  "failures": [
+    {
+      "handle": "mickeymantled",
+      "error": "Stats control not found"
+    }
+  ],
+  "startedAt": "2026-11-05T02:55:16.046Z",
+  "finishedAt": "2026-11-05T02:55:37.245Z",
+  "leaderboardHandles": 0,
+  "leaderboardViews": [],
+  "endpoints": 0,
+  "fatal": null,
+  "source": "collector",
+  "recovered": false
+}

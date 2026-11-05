@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-11-05T00:37:13.850Z",
+  "generatedAt": "2026-11-05T02:55:37.247Z",
   "failedProfiles": [
     {
-      "handle": "rug.hunter ü",
-      "error": "Callouts modal did not render after 3 attempts (timeout 30s)",
-      "at": "2026-11-05T00:22:49.850Z"
+      "handle": "mickeymantled",
+      "error": "Stats control not found",
+      "at": "2026-11-05T02:55:37.239Z"
     }
   ],
   "noCallouts": [],
