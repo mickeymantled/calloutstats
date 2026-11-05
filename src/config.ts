@@ -17,6 +17,10 @@ export interface Config {
   windows: WindowDef[];
   defaultWindow: string;
   scrapeIntervalHours: number;
+  /** local hour (0-23) at/after which an interval-due run may start (collector) */
+  scheduleHourLocal: number;
+  /** port the local collector service (src/collector/server.ts) listens on */
+  collectorPort: number;
   /** leaderboard views to scrape: all | monthly | weekly | daily */
   leaderboardViews: string[];
   delayBetweenProfilesMs: [number, number];
@@ -52,6 +56,8 @@ const DEFAULTS: Config = {
   ],
   defaultWindow: "since",
   scrapeIntervalHours: 24,
+  scheduleHourLocal: 6,
+  collectorPort: 47831,
   leaderboardViews: ["all", "monthly"],
   delayBetweenProfilesMs: [2000, 4000],
   maxRetriesPerProfile: 3,

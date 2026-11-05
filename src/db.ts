@@ -204,8 +204,7 @@ export function insertCalloutSnapshot(db: DB, calloutId: number, runId: number, 
 }
 
 /** Store a whole parsed profile (rows + header) for one run. */
-export function storeProfileResult(db: DB, handle: string, runId: number, rows: ParsedRow[], header: HeaderTotals | null, source = "dom") {
-  const scrapedAt = new Date();
+export function storeProfileResult(db: DB, handle: string, runId: number, rows: ParsedRow[], header: HeaderTotals | null, source = "dom", scrapedAt: Date = new Date()) {
   const tx = db.transaction(() => {
     for (const row of rows) {
       const id = matchOrCreateCallout(db, handle, row, scrapedAt, runId);

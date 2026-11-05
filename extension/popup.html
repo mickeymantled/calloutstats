@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Callout Check collector</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f1115; color: #e6e6e6; margin: 0; width: 320px; }
+    main { padding: 12px 14px; }
+    h1 { font-size: 14px; margin: 0 0 10px; }
+    .row { display: flex; justify-content: space-between; gap: 8px; margin: 4px 0; }
+    .muted { color: #9aa0a6; }
+    .ok { color: #4ade80; } .bad { color: #f87171; } .warn { color: #fbbf24; }
+    button { background: #22c55e; color: #052e16; border: 0; border-radius: 6px; padding: 7px 10px; font-weight: 600; cursor: pointer; }
+    button.secondary { background: #262a33; color: #e6e6e6; }
+    button:disabled { opacity: .5; cursor: default; }
+    input[type=text] { width: 100%; box-sizing: border-box; background: #161922; color: #e6e6e6; border: 1px solid #2a2f3a; border-radius: 6px; padding: 6px 8px; font-size: 12px; }
+    label { display: block; margin-top: 10px; color: #9aa0a6; font-size: 12px; }
+    .actions { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+    #msg { margin-top: 8px; min-height: 16px; font-size: 12px; }
+    hr { border: 0; border-top: 1px solid #2a2f3a; margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Callout Check collector</h1>
+    <div class="row"><span class="muted">Collector</span><span id="collector">checking…</span></div>
+    <div class="row"><span class="muted">Known KOLs</span><span id="kols">—</span></div>
+    <div class="row"><span class="muted">Last run</span><span id="lastRun">—</span></div>
+    <div class="row"><span class="muted">Now</span><span id="now">idle</span></div>
+    <div class="row"><span class="muted">Due</span><span id="due">—</span></div>
+    <hr>
+    <div class="actions">
+      <button id="run">Run now</button>
+      <button id="runOne" class="secondary" title="Only the handle below, skip the leaderboard">Run one</button>
+      <label style="margin:0;display:flex;align-items:center;gap:6px"><input type="checkbox" id="enabled"> enabled</label>
+    </div>
+    <label>Handle for "Run one"<input type="text" id="handle" placeholder="mickeymantled"></label>
+    <label>Collector URL<input type="text" id="url" placeholder="http://127.0.0.1:47831"></label>
+    <div id="msg" class="muted"></div>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

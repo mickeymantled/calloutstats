@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "extension-smoke",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["extension/test/serve.mjs", "4173"],
+      "port": 4173
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "site", "run", "dev"],
+      "port": 3000
+    }
+  ]
+}

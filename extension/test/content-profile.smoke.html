@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>content-profile smoke test</title>
+<meta property="og:title" content="mickeymantled | Pump">
+<meta property="og:image" content="https://example.invalid/avatar.png">
+<style>
+  body { font-family: sans-serif; background: #111; color: #eee; padding: 16px; }
+  #dialog { border: 1px solid #555; padding: 8px; margin-top: 12px; width: 520px; }
+  #list { height: 260px; overflow-y: auto; border: 1px solid #333; padding: 4px; }
+  .row { padding: 4px 0; border-bottom: 1px solid #222; }
+  pre { white-space: pre-wrap; background: #000; padding: 8px; }
+</style>
+</head>
+<body>
+<!--
+  Smoke test for content-profile.js: a fake pump.fun profile page with a Stats
+  button that opens a dialog (header totals, tabs, a scrollable 60-row list) in
+  the text shape the parser expects. chrome.runtime.sendMessage is stubbed so the
+  script's result lands on the page. Open this file in Chrome (file://) and read
+  the summary at the bottom; or open it from the Claude browser pane.
+-->
+<h1>mickeymantled</h1>
+<p>Fake profile page. <button id="stats">Stats</button></p>
+<div id="root"></div>
+<h2>Result</h2>
+<pre id="out">waiting for the content script…</pre>
+<script>
+  // ---- fixture ----
+  const rows = Array.from({ length: 60 }, (_, i) => {
+    const reached = i % 5 === 0 ? "—" : `+$${(i + 1) * 10}K`;
+    const pnl1h = i % 7 === 0 ? `-$${i + 1}K` : `+$${i + 1}K`;
+    const mult = i % 3 === 0 ? "" : `<div>${i + 2}x</div>`;
+    return `<div class="row"><div>TOKEN${i} · ${i + 1}d ago</div><div>${100 + i} tailers · 1h ${pnl1h} · 1d +$${(i + 1) * 2}K · reached ${reached}</div>${mult}<div>$39.3K → $2.01M MC</div></div>`;
+  }).join("");
+  document.getElementById("stats").addEventListener("click", () => {
+    document.getElementById("root").innerHTML = `
+      <div id="dialog" role="dialog">
+        <div>Callouts</div><div>60</div><div>Tailers</div><div>12.4K</div><div>Tail volume</div><div>$1.2M</div>
+        <div role="tablist"><button role="tab" id="tab-callouts">Callouts</button><button role="tab">Trades</button></div>
+        <button id="sort">Sort: Multiplier</button>
+        <div id="list"></div>
+      </div>`;
+    document.getElementById("sort").addEventListener("click", () => {
+      const menu = document.createElement("div");
+      menu.innerHTML = `<div role="menuitem">Recent</div><div role="menuitem">Largest multiplier</div>`;
+      document.getElementById("dialog").appendChild(menu);
+      menu.querySelector("[role=menuitem]").addEventListener("click", () => { document.getElementById("sort").textContent = "Sort: Recent"; menu.remove(); });
+    });
+    // the list fills in only after the Callouts tab is clicked, like a real tab switch
+    document.getElementById("tab-callouts").addEventListener("click", () => { document.getElementById("list").innerHTML = rows; });
+  });
+
+  // ---- stub the extension messaging ----
+  window.__ccMsgs = [];
+  window.chrome = { runtime: { sendMessage: (m) => { window.__ccMsgs.push(m); if (m.type === "result") show(m.result); } } };
+  window.__ccArgs = { token: "smoke", handle: "mickeymantled" };
+  function show(r) {
+    const summary = {
+      status: r.status, state: r.state, error: r.error ?? null, iterations: r.iterations,
+      blocks: r.blocks ? r.blocks.length : null,
+      modalTextLines: r.modalText ? r.modalText.split("\n").filter(Boolean).length : 0,
+      dialogHasHeader: /Tail volume/.test(r.dialogText || ""),
+      displayName: r.displayName, avatarUrl: r.avatarUrl,
+      firstBlock: r.blocks && r.blocks[0], sortLabel: document.getElementById("sort")?.textContent ?? null,
+      progress: window.__ccMsgs.filter((m) => m.type === "progress").map((m) => m.msg),
+    };
+    window.__ccResult = summary;
+    document.getElementById("out").textContent = JSON.stringify(summary, null, 2);
+  }
+  // run the real content script once the page is ready
+  window.addEventListener("load", () => {
+    const s = document.createElement("script");
+    s.src = "../content-profile.js";
+    document.body.appendChild(s);
+  });
+</script>
+</body>
+</html>

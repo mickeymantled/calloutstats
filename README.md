@@ -8,31 +8,27 @@ static JSON bundle that the public site builds from. Purpose: let anyone check a
 The scraper runs daily on a Mac (headed Chromium, persistent login); the site is a static
 Next.js export deployed to Vercel.
 
-## Status (2026-11-04): unattended scraping is blocked by pump.fun's bot protection
+## How data is collected (status 2026-11-04)
 
-Everything in this repo works end to end except the unattended part. Tested on 2026-11-04:
+pump.fun's Cloudflare configuration re-challenges any WebDriver/CDP-driven browser on every
+launch (tested with Playwright + bundled Chromium and Playwright + Google Chrome 157, logged
+in, with a valid `cf_clearance`), and answers plain HTTPS clients with 403
+`cf-mitigated: challenge`. pump.fun has no data API. Their team told the project owner to
+collect the figures the way user-side tools such as notrandom.fun do: from the user's own
+browser session. So the unattended path is:
 
-- Playwright-driven Chromium (bundled build) and Playwright-driven Google Chrome 157, headed,
-  persistent profile, logged in, with a valid `cf_clearance` cookie obtained by hand in a plain
-  Chrome window: Cloudflare re-issues the interactive "Verify you are human" check on every
-  automated launch. A human clicking the checkbox inside the automated window does clear it
-  for that session, so interactive runs work.
-- Plain HTTPS clients against `frontend-api-v3.pump.fun` and `advanced-api-v2.pump.fun`,
-  identified as this project: HTTP 403 with `cf-mitigated: challenge`.
+- **`extension/`**: a Chrome extension loaded into the dedicated, logged-in Chrome profile
+  (`data/browser-profile-chrome/`). Once a day it opens each profile in a side window,
+  does what the console script does (Stats -> Callouts -> scroll to the end) and hands the
+  raw text to the collector. It never touches a verification page; if one appears the
+  profile is reported as failed. See `extension/README.md` for the one-time install.
+- **Collector** (`npm run collector`, `src/collector/`): an always-on local service on
+  127.0.0.1:47831 that owns scheduling, parsing (the same parser as everything else),
+  SQLite, export and publish. `launchd/` keeps it and the Chrome profile running at login.
 
-This project does not try to hide automation from Cloudflare (no stealth flags, no
-fingerprint spoofing). Until one of the following changes, the launchd job will fail fast
-and log why.
-
-1. Ask pump.fun for data access (an export or an API key). This is the only sustainable
-   unattended path; `src/scraper/api.ts` is the place to plug it in.
-2. Interactive runs: `npm run scrape` opens Chrome, you click the checkbox once, the run
-   continues through every profile and publishes.
-3. Manual: run `pumpfun_callout_check.js` in your own browser per profile (a CSV import
-   command is not built yet).
-
-`config.json` currently points at Google Chrome (`browser.channel: "chrome"`, profile in
-`data/browser-profile-chrome/`); set `channel` to `null` to go back to the bundled Chromium.
+Other routes that still work: manual captures with the console script (next section), and
+the Playwright scraper for interactive runs (`npm run scrape`, you click the checkbox once).
+Nothing in this repo hides automation from Cloudflare or spoofs a browser.
 
 ## Prerequisites
 
@@ -53,6 +49,51 @@ Complete the Cloudflare check and log in in that window, then press Enter in the
 Cookies live in the profile directory, so every later scrape reuses the session. Repeat
 this whenever pump.fun logs you out (the scraper logs a warning when no saved session is
 found and continues anonymously, which usually still works for public profiles).
+
+## Manual captures: console script + `npm run import`
+
+This is the route that works today without automating pump.fun. You run the original
+console script in your own browser; it never leaves your session.
+
+1. Open `pump.fun/profile/<handle>` in your browser, click **Stats**, then the **Callouts** tab.
+2. Open DevTools (Cmd-Opt-J), paste the whole of `pumpfun_callout_check.js`, press Enter.
+   It scrolls the list to the end, prints the parsed table, totals and a CSV, and builds a
+   JSON capture (raw modal text, header text, page metadata; no numbers are parsed in the
+   browser, the importer re-parses with the shared parser).
+3. If `npm run collector` is running on this machine the capture is stored immediately
+   (`POST http://127.0.0.1:47831/capture`) and the site bundle is re-exported. Otherwise the
+   capture is copied to the clipboard; then:
+
+```sh
+npm run import -- --clipboard                 # store what is on the clipboard
+# or keep files around:
+mkdir -p data/captures && pbpaste > data/captures/mickeymantled.json
+npm run import data/captures/*.json           # several captures become one run
+```
+
+Each import is a run: callouts are matched to existing ones (handle + token + estimated
+date, entry MC), a new snapshot is appended, `profile_snapshots` records the header totals
+with `source = import`, and `site/public/data/` is re-exported. `npm run publish` then
+commits and pushes. The capture's `scrapedAt` (when you ran the script) is used as the
+snapshot time, so importing later is fine.
+
+## The collector service
+
+```sh
+npm run collector                       # 127.0.0.1:47831, logs to data/logs/<date>.log
+npm run scrape:request                  # ask for a full run (leaderboard + every known handle)
+npm run scrape:request -- --handle a,b  # only these handles, no leaderboard
+npm run scrape:request -- --limit 20    # cap this run
+curl -s 127.0.0.1:47831/status          # what it is doing, last run, due-ness
+```
+
+The collector owns the run lifecycle for the extension (`docs/collector-protocol.md`):
+`/due` decides when the daily run starts (`scheduleHourLocal`, `scrapeIntervalHours`, or an
+explicit request), `/run/start` plans it, `/run/:id/profile` parses each profile's text with
+the shared parser and stores it, `/run/:id/finish` exports the bundle and spawns
+`npm run publish`. `POST /capture` accepts a manual capture from the console script. It
+listens on 127.0.0.1 only. `collectorPort` in `config.json` changes the port (update the
+extension popup's URL field too).
 
 ## Verify a single profile
 
@@ -120,7 +161,23 @@ The rewards column for a window uses the leaderboard view of the same length (7 
 scraped. With the default `["all", "monthly"]` the 7-day window shows all-time rewards;
 add `"weekly"` if you want it exact.
 
+### Two keys the collector uses
+
+| key | default | meaning |
+|---|---|---|
+| `scheduleHourLocal` | 6 | earliest local hour for the automatic daily run |
+| `collectorPort` | 47831 | port of the local collector service |
+
 ## Scheduling with launchd
+
+Daily collection is driven by the collector + extension pair, not by the Playwright scrape
+job. `scripts/install-launchd.sh` installs three agents: `com.calloutcheck.collector`
+(always on), `com.calloutcheck.chrome` (opens the dedicated Chrome profile at login) and the
+optional `com.calloutcheck.scrape` (Playwright path). The run time is `scheduleHourLocal`
+in `config.json` (default 6 = 06:00 local, Pacific on this Mac); the extension polls the
+collector once a minute and starts the run when it is due.
+
+### Playwright scrape job (optional)
 
 `launchd/com.calloutcheck.scrape.plist` runs
 `cd "<repo>" && npm run scrape -- --no-interactive && npm run publish` every day at

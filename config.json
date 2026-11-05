@@ -26,6 +26,8 @@
   ],
   "defaultWindow": "since",
   "scrapeIntervalHours": 24,
+  "scheduleHourLocal": 6,
+  "collectorPort": 47831,
   "leaderboardViews": [
     "all",
     "monthly"

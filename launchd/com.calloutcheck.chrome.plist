@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  Callout Check: open the dedicated Google Chrome profile at login (LaunchAgent,
+  runs as the logged-in user).
+
+  Chrome is launched directly (no shell) with its own user-data-dir inside the
+  repo, data/browser-profile-chrome, which is the profile that is logged in to
+  pump.fun. It opens https://pump.fun/ so the session is warm for the manual
+  console-script capture (pumpfun_callout_check.js -> POST /capture on the
+  collector) or any other client the user runs in that window.
+
+  This file is a template rendered by scripts/install-launchd.sh, which fills in
+    absolute repo path        -> __REPO__
+  and writes the result to ~/Library/LaunchAgents/com.calloutcheck.chrome.plist.
+  ProgramArguments is an argv array, so the space in the repo path needs no quoting.
+
+  RunAtLoad: opened once at login. KeepAlive/SuccessfulExit=false: relaunched only
+  when Chrome exits with a non-zero status (a crash), NOT when the user quits it
+  normally (exit 0). If Chrome is already running with this profile, a second
+  launch just hands the URL to the running instance and exits 0, which also does
+  not trigger a relaunch. Requires /Applications/Google Chrome.app.
+
+  The older com.calloutcheck.scrape.plist (Playwright, 06:00 daily) is the
+  automated-browser path and is optional now; see scripts/install-launchd.sh.
+-->
+<dict>
+  <key>Label</key>
+  <string>com.calloutcheck.chrome</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Applications/Google Chrome.app/Contents/MacOS/Google Chrome</string>
+    <string>--user-data-dir=__REPO__/data/browser-profile-chrome</string>
+    <string>--no-first-run</string>
+    <string>--no-default-browser-check</string>
+    <string>https://pump.fun/</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <key>StandardOutPath</key>
+  <string>__REPO__/data/logs/chrome.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__REPO__/data/logs/chrome.err.log</string>
+</dict>
+</plist>

@@ -9,13 +9,18 @@
     "verify": "tsx src/cli/verify.ts",
     "login": "tsx src/cli/login.ts",
     "export": "tsx src/cli/export.ts",
+    "collector": "tsx src/cli/collector.ts",
+    "scrape:request": "tsx src/cli/request-run.ts",
     "publish": "bash scripts/publish.sh",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "site:dev": "npm --prefix site run dev",
-    "site:build": "npm --prefix site run build"
+    "site:build": "npm --prefix site run build",
+    "import": "tsx src/cli/import.ts"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
     "playwright": "^1.49.0"

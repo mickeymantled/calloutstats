@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Callout Check collector",
+  "version": "0.1.0",
+  "description": "Collects pump.fun callout stats from this browser's own logged-in session and hands them to the local Callout Check collector on 127.0.0.1:47831.",
+  "permissions": ["alarms", "storage", "scripting", "tabs"],
+  "host_permissions": ["https://pump.fun/*", "http://127.0.0.1:47831/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Callout Check collector" }
+}
