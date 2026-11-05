@@ -1,0 +1,38 @@
+{
+  "generatedAt": "2026-11-05T00:37:13.850Z",
+  "run": {
+    "id": 3,
+    "startedAt": "2026-11-05T00:13:49.850Z",
+    "finishedAt": "2026-11-05T00:22:49.850Z",
+    "status": "partial",
+    "profilesTotal": 3,
+    "profilesOk": 2,
+    "profilesFailed": 1,
+    "notes": "fixture run 3"
+  },
+  "windows": [
+    {
+      "id": "7d",
+      "label": "7 days",
+      "days": 7
+    },
+    {
+      "id": "30d",
+      "label": "30 days",
+      "days": 30
+    },
+    {
+      "id": "since",
+      "label": "Since Oct 12, 2026",
+      "since": "2026-10-12"
+    },
+    {
+      "id": "all",
+      "label": "All time"
+    }
+  ],
+  "defaultWindow": "since",
+  "kolCount": 3,
+  "calloutCount": 56,
+  "fixture": true
+}

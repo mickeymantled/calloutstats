@@ -1,0 +1,30 @@
+{
+  "name": "callout-check",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Scrapes pump.fun KOL callout stats into SQLite and exports a static JSON bundle for the Callout Check site.",
+  "scripts": {
+    "scrape": "tsx src/cli/scrape.ts",
+    "verify": "tsx src/cli/verify.ts",
+    "login": "tsx src/cli/login.ts",
+    "export": "tsx src/cli/export.ts",
+    "publish": "bash scripts/publish.sh",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "site:dev": "npm --prefix site run dev",
+    "site:build": "npm --prefix site run build"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "playwright": "^1.49.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

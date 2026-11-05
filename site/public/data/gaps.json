@@ -1,0 +1,13 @@
+{
+  "generatedAt": "2026-11-05T00:37:13.850Z",
+  "failedProfiles": [
+    {
+      "handle": "rug.hunter ü",
+      "error": "Callouts modal did not render after 3 attempts (timeout 30s)",
+      "at": "2026-11-05T00:22:49.850Z"
+    }
+  ],
+  "noCallouts": [],
+  "staleProfiles": [],
+  "discoveredEndpoints": []
+}

@@ -1,0 +1,12 @@
+node_modules/
+site/node_modules/
+site/.next/
+site/out/
+# local state: never commit the browser profile (cookies / session)
+data/browser-profile*/
+data/*.sqlite
+data/*.sqlite-*
+data/raw/
+data/logs/
+.DS_Store
+*.log

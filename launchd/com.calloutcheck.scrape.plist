@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  Callout Check: daily scrape + publish (LaunchAgent, runs as the logged-in user).
+
+  This file is a template rendered by scripts/install-launchd.sh, which fills in
+    absolute repo path        -> __REPO__
+    directory of `node`       -> __NODE_BIN__
+  and writes the result to ~/Library/LaunchAgents/com.calloutcheck.scrape.plist.
+  On this Mac the repo is "/Users/brianbaldocchi/Desktop/Callout Checker"; the
+  space is safe because the path sits inside double quotes in the zsh command and
+  plist strings may contain spaces. The node directory is prepended to PATH
+  because a non-interactive `zsh -lc` reads ~/.zprofile but not ~/.zshrc.
+
+  Schedule: StartCalendarInterval is evaluated in the Mac's LOCAL time zone.
+  This Mac is set to Pacific (America/Los_Angeles), so Hour 6 / Minute 0 means
+  06:00 Pacific, following DST automatically. If the Mac is asleep at 06:00 the
+  job runs once it wakes; if it is powered off the run is skipped.
+
+  The scraper drives a headed Chromium, so a user must be logged in to the GUI
+  session for the job to work (screen lock is fine, logged-out is not).
+  Output: data/logs/launchd.out.log and data/logs/launchd.err.log.
+-->
+<dict>
+  <key>Label</key>
+  <string>com.calloutcheck.scrape</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>cd "__REPO__" &amp;&amp; npm run scrape -- --no-interactive &amp;&amp; npm run publish</string>
+  </array>
+
+  <!-- 06:00 local time (Pacific on this Mac), every day -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>6</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>__REPO__/data/logs/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__REPO__/data/logs/launchd.err.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__NODE_BIN__:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>

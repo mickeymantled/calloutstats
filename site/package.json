@@ -1,0 +1,27 @@
+{
+  "name": "callout-check-site",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Static Next.js site for Callout Check: pump.fun KOL callout stats, built from the JSON bundle in public/data.",
+  "scripts": {
+    "dev": "next dev",
+    "prebuild": "node scripts/build-og.mjs",
+    "build": "next build",
+    "og": "node scripts/build-og.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20.9"
+  },
+  "dependencies": {
+    "next": "16.4.5",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^5.9.0"
+  }
+}

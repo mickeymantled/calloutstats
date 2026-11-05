@@ -1,0 +1,48 @@
+{
+  "includeHandles": [
+    "mickeymantled"
+  ],
+  "excludeHandles": [],
+  "windows": [
+    {
+      "id": "7d",
+      "label": "7 days",
+      "days": 7
+    },
+    {
+      "id": "30d",
+      "label": "30 days",
+      "days": 30
+    },
+    {
+      "id": "since",
+      "label": "Since Oct 12, 2026",
+      "since": "2026-10-12"
+    },
+    {
+      "id": "all",
+      "label": "All time"
+    }
+  ],
+  "defaultWindow": "since",
+  "scrapeIntervalHours": 24,
+  "leaderboardViews": [
+    "all",
+    "monthly"
+  ],
+  "delayBetweenProfilesMs": [
+    2000,
+    4000
+  ],
+  "maxRetriesPerProfile": 3,
+  "maxProfilesPerRun": 0,
+  "browser": {
+    "channel": "chrome",
+    "headless": false,
+    "userDataDir": "data/browser-profile-chrome",
+    "timezoneId": "America/Los_Angeles"
+  },
+  "export": {
+    "siteDataDir": "site/public/data"
+  }
+}
