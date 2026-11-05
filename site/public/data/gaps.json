@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-11-05T02:55:37.247Z",
+  "generatedAt": "2026-11-05T02:55:56.251Z",
   "failedProfiles": [
     {
       "handle": "mickeymantled",
       "error": "Stats control not found",
-      "at": "2026-11-05T02:55:37.239Z"
+      "at": "2026-11-05T02:55:56.244Z"
     }
   ],
   "noCallouts": [],

@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-11-05T02:55:37.247Z",
+  "generatedAt": "2026-11-05T02:55:56.251Z",
   "run": {
-    "id": 1,
-    "startedAt": "2026-11-05T02:55:16.046Z",
-    "finishedAt": "2026-11-05T02:55:37.245Z",
+    "id": 2,
+    "startedAt": "2026-11-05T02:55:38.523Z",
+    "finishedAt": "2026-11-05T02:55:56.251Z",
     "status": "partial",
     "profilesTotal": 1,
     "profilesOk": 0,
